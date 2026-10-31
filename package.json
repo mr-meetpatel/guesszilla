@@ -1,0 +1,14 @@
+{
+  "name": "wordle-platform", "private": true, "packageManager": "pnpm@12.4.2",
+  "scripts": {
+    "dev": "pnpm --filter @wordle/admin dev",
+    "build": "pnpm --filter @wordle/admin build",
+    "test": "pnpm --filter @wordle/admin test",
+    "check": "pnpm --filter @wordle/admin check",
+    "e2e": "pnpm --filter @wordle/admin e2e",
+    "generate:client": "pnpm --filter @wordle/admin generate:client",
+    "format": "prettier --write apps/admin/src apps/admin/tests apps/admin/vite.config.ts apps/admin/playwright.config.ts",
+    "format:check": "prettier --check apps/admin/src apps/admin/tests apps/admin/vite.config.ts apps/admin/playwright.config.ts"
+  },
+  "devDependencies": { "prettier": "^3.8.0" }
+}
