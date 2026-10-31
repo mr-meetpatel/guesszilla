@@ -82,7 +82,7 @@ profile_default/
 ipython_config.py
 
 # pyenv
-.python-version
+# .python-version is committed for pyenv and uv reproducibility.
 
 # pipenv
 #   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+.ruff_cache/
+node_modules/
+apps/admin/dist/
+test-results/
+playwright-report/
