@@ -1,0 +1,43 @@
+# Standalone configuration: docker compose -f compose.supabase.yaml up --build -d
+name: wordle-bot-supabase
+x-app: &app
+  build: .
+  env_file: ${ENV_FILE:-.env}
+  environment:
+    DB_BACKEND: supabase
+    APP_ENV: production
+    PORT: "8000"
+  restart: unless-stopped
+  init: true
+  stop_grace_period: 40s
+services:
+  migrate:
+    <<: *app
+    command: ["wordle-bot", "migrate"]
+    restart: "no"
+    healthcheck:
+      disable: true
+  web:
+    <<: *app
+    command: ["wordle-bot", "serve", "--skip-migrate"]
+    ports:
+      - "127.0.0.1:${PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  worker:
+    <<: *app
+    environment:
+      DB_BACKEND: supabase
+      APP_ENV: production
+      WORKER_ID: compose-worker
+    command: ["wordle-bot", "worker", "--skip-migrate"]
+    healthcheck:
+      test: ["CMD", "wordle-bot", "health-worker"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    depends_on:
+      migrate:
+        condition: service_completed_successfully

@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: wordle-slack-bot
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerCommand: wordle-bot combined
+    healthCheckPath: /health/ready
+    envVars:
+      - key: DB_BACKEND
+        value: supabase
+      - key: APP_ENV
+        value: production
+      - key: APP_TIMEZONE
+        value: Asia/Kolkata
+      - key: AUTO_MIGRATE
+        value: "true"
+      - key: WEB_WORKERS
+        value: "1"
+      - key: WORKER_POLL_SECONDS
+        value: "5"
+      - key: DATABASE_URL
+        sync: false
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: SLACK_SIGNING_SECRET
+        sync: false
+      - key: SLACK_TEAM_ID
+        sync: false
+      - key: SLACK_CHANNEL_ID
+        sync: false
