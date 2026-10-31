@@ -1,0 +1,96 @@
+name: wordle-bot
+x-app: &app
+  build: .
+  env_file: ${ENV_FILE:-.env}
+  environment: &local-env
+    APP_ENV: production
+    DB_BACKEND: local
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-wordle}:${POSTGRES_PASSWORD:-wordle-local-only}@db:5432/${POSTGRES_DB:-wordle}
+    MIGRATION_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-wordle}:${POSTGRES_PASSWORD:-wordle-local-only}@db:5432/${POSTGRES_DB:-wordle}
+    PORT: "8000"
+    ADMIN_PANEL_ENABLED: "true"
+  restart: unless-stopped
+  init: true
+  stop_grace_period: 40s
+  mem_limit: 512m
+  cpus: "1.0"
+
+services:
+  db:
+    image: postgres:17.11-bookworm
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wordle}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wordle-local-only}
+      POSTGRES_DB: ${POSTGRES_DB:-wordle}
+    ports:
+      - "127.0.0.1:${DB_HOST_PORT:-15432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+  migrate:
+    <<: *app
+    command: ["wordle-bot", "migrate"]
+    restart: "no"
+    healthcheck:
+      disable: true
+    depends_on:
+      db:
+        condition: service_healthy
+  web:
+    <<: *app
+    command: ["wordle-bot", "serve", "--skip-migrate"]
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  worker:
+    <<: *app
+    environment:
+      <<: *local-env
+      WORKER_ID: compose-worker
+    command: ["wordle-bot", "worker", "--skip-migrate"]
+    healthcheck:
+      test: ["CMD", "wordle-bot", "health-worker"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  scheduler:
+    <<: *app
+    environment:
+      <<: *local-env
+      WORKER_ID: scheduler
+    command: ["wordle-bot", "scheduler", "--skip-migrate"]
+    healthcheck:
+      test: ["CMD", "wordle-bot", "health-worker"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  frontend:
+    build:
+      context: .
+      dockerfile: infra/admin.Dockerfile
+    environment:
+      API_UPSTREAM: web:8000
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-8080}:8080"
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: "0.5"
+    depends_on:
+      web:
+        condition: service_started
+volumes:
+  postgres-data:

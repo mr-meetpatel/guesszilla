@@ -1,0 +1,40 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    env:
+      ENV_FILE: .env.example
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --python python
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - run: npm install --global pnpm@12.4.2
+      - run: pnpm install --frozen-lockfile
+      - run: make check
+      - run: make check-client
+      - run: pnpm --filter @wordle/admin exec playwright install --with-deps chromium
+      - run: make test-all
+      - run: make validate-render
+      - run: docker build -t wordle-bot:ci .
+      - run: docker build -f infra/admin.Dockerfile -t wordle-admin:ci .
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-test-results
+          path: apps/admin/test-results/
+      - run: docker compose down
+        if: always()
