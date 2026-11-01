@@ -1,5 +1,15 @@
 # syntax=docker/dockerfile:1
 ARG PYTHON_VERSION=3.14.8
+FROM node:22.22.3-alpine AS frontend-builder
+RUN npm install --global pnpm@12.4.2
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/admin/package.json apps/admin/package.json
+RUN pnpm install --frozen-lockfile
+COPY apps/admin apps/admin
+ARG VITE_PERSIST_LOGS=false
+RUN pnpm build
+
 FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
 RUN python -m pip install --no-cache-dir uv==0.9.26
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
@@ -13,10 +23,12 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-edi
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 APP_ENV=production HOME=/home/wordle PYTHONTZPATH=""
+ENV FRONTEND_DIR=/app/admin ADMIN_PANEL_ENABLED=true
 RUN groupadd --gid 10001 wordle && useradd --uid 10001 --gid wordle --create-home --home-dir /home/wordle wordle
 WORKDIR /app
 COPY --from=builder --chown=wordle:wordle /app/.venv /app/.venv
+COPY --from=frontend-builder --chown=wordle:wordle /app/apps/admin/dist /app/admin
 USER wordle
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('PORT','8000')+'/health/ready',timeout=3)"
-CMD ["wordle-bot", "serve"]
+CMD ["wordle-bot", "combined"]

@@ -50,7 +50,7 @@ jobs:
     needs: checks
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 65
+    timeout-minutes: 20
     environment: production
     concurrency:
       group: render-production
@@ -63,9 +63,6 @@ jobs:
       - name: Deploy tested commit and wait for live services
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_API_SERVICE_ID: ${{ vars.RENDER_API_SERVICE_ID }}
-          RENDER_WORKER_SERVICE_ID: ${{ vars.RENDER_WORKER_SERVICE_ID }}
-          RENDER_SCHEDULER_SERVICE_ID: ${{ vars.RENDER_SCHEDULER_SERVICE_ID }}
-          RENDER_ADMIN_SERVICE_ID: ${{ vars.RENDER_ADMIN_SERVICE_ID }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
           RENDER_COMMIT_SHA: ${{ github.sha }}
         run: python scripts/deploy_render.py

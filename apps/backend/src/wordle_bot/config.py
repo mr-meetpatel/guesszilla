@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     jwt_secret_key: SecretStr = SecretStr("")
     credential_encryption_keys: SecretStr = SecretStr("")
     public_url: str = "http://localhost:8080"
+    frontend_dir: str = ""
     cookie_secure: bool = True
     # Database log/audit retention is opt-in to keep hosted free tiers small.
     persist_logs: bool = False

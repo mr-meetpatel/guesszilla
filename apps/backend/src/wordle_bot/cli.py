@@ -52,7 +52,7 @@ def main() -> None:
                 migrate(settings)
         if args.command == "combined":
             os.environ.setdefault("WORKER_ID", "combined-worker")
-            sys.exit(supervise(combined_commands()))
+            sys.exit(supervise(combined_commands(admin_panel_enabled=settings.admin_panel_enabled)))
         if args.command == "serve":
             executable = os.path.join(os.path.dirname(sys.executable), "gunicorn")
             os.execv(

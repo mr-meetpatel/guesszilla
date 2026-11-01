@@ -7,7 +7,7 @@ from slack_sdk.errors import SlackApiError
 from slack_sdk.web.slack_response import SlackResponse
 
 from wordle_bot.repositories.postgres import ClaimedJob
-from wordle_bot.runtime import supervise
+from wordle_bot.runtime import combined_commands, supervise
 from wordle_bot.slack_client import SlackClient
 from wordle_bot.worker import Worker
 
@@ -59,6 +59,14 @@ def test_existing_reaction_is_success():
     slack.client = Mock()
     slack.client.reactions_add.side_effect = slack_error("already_reacted")
     slack.react("C123", "123.456", "fire")
+
+
+def test_combined_includes_scheduler_only_in_platform_mode():
+    legacy = combined_commands()
+    platform = combined_commands(admin_panel_enabled=True)
+    assert [command[-2] for command in legacy] == ["serve", "worker"]
+    assert [command[-2] for command in platform] == ["serve", "worker", "scheduler"]
+    assert all(command[-1] == "--skip-migrate" for command in platform)
 
 
 def test_supervisor_stops_sibling_when_child_exits(tmp_path):

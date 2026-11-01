@@ -55,11 +55,12 @@ test('manual repeated sends reuse the same report and expose per-part receipts',
   await expect(page.getByRole('button', { name: 'Retry confirmed failure' })).toHaveCount(0);
 });
 
-test('audit stream and session management are reachable behind login', async ({ page }) => {
-  await page.getByRole('link', { name: 'Logs & audit' }).click();
-  await expect(page.getByRole('heading', { name: 'Nothing happens in the dark.' })).toBeVisible();
-  await page.getByLabel('Log category').selectOption('audit');
-  await expect(page.getByText('auth.login').first()).toBeVisible();
+test('audit UI is disabled by default and session management remains available', async ({
+  page,
+}) => {
+  await expect(page.getByRole('link', { name: 'Logs & audit' })).toHaveCount(0);
+  await page.goto('/logs');
+  await expect(page).toHaveURL('/');
   await page.getByRole('link', { name: 'Administration', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Active session families' })).toBeVisible();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();

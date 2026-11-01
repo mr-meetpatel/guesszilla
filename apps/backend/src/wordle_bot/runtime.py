@@ -1,4 +1,4 @@
-"""Supervise web and worker in one container for constrained hosting."""
+"""Supervise web, worker and platform scheduler in one container."""
 
 import os
 import signal
@@ -44,8 +44,11 @@ def supervise(commands: Sequence[Sequence[str]], *, shutdown_timeout: float = 30
     return result
 
 
-def combined_commands() -> list[list[str]]:
-    return [
+def combined_commands(*, admin_panel_enabled: bool = False) -> list[list[str]]:
+    commands = [
         [sys.executable, "-m", "wordle_bot.cli", "serve", "--skip-migrate"],
         [sys.executable, "-m", "wordle_bot.cli", "worker", "--skip-migrate"],
     ]
+    if admin_panel_enabled:
+        commands.append([sys.executable, "-m", "wordle_bot.cli", "scheduler", "--skip-migrate"])
+    return commands

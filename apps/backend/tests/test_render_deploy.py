@@ -22,10 +22,7 @@ def environment():
     return {
         "RENDER_API_KEY": "secret-test-key",
         "RENDER_COMMIT_SHA": "a" * 40,
-        **{
-            f"RENDER_{name}_SERVICE_ID": f"srv-{name.lower()}"
-            for name in ("API", "WORKER", "SCHEDULER", "ADMIN")
-        },
+        "RENDER_SERVICE_ID": "srv-wordle",
     }
 
 
@@ -45,9 +42,9 @@ def test_requires_full_commit_sha(deploy, environment, value):
         deploy.configuration(environment)
 
 
-def test_duplicate_service_rejected(deploy, environment):
-    environment["RENDER_WORKER_SERVICE_ID"] = environment["RENDER_API_SERVICE_ID"]
-    with pytest.raises(deploy.DeploymentError, match="different service"):
+def test_invalid_service_rejected(deploy, environment):
+    environment["RENDER_SERVICE_ID"] = "invalid/service"
+    with pytest.raises(deploy.DeploymentError, match="Service IDs"):
         deploy.configuration(environment)
 
 
@@ -57,7 +54,7 @@ def test_failed_api_deploy_stops_release(deploy, environment, monkeypatch):
     client.deploy.side_effect = deploy.DeploymentError("failed")
     monkeypatch.setattr(deploy, "RenderClient", Mock(return_value=client))
     assert deploy.main() == 1
-    client.deploy.assert_called_once_with("API", "srv-api", "a" * 40)
+    client.deploy.assert_called_once_with("WORDLE", "srv-wordle", "a" * 40)
 
 
 def test_pins_commit_and_waits_for_live(deploy, monkeypatch):

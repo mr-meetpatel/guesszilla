@@ -10,7 +10,6 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 API = "https://api.render.com/v1"
-SERVICES = ("API", "WORKER", "SCHEDULER", "ADMIN")
 FAILED = {"build_failed", "update_failed", "pre_deploy_failed", "canceled", "deactivated"}
 
 
@@ -19,20 +18,16 @@ class DeploymentError(Exception):
 
 
 def configuration(environment: Mapping[str, str]) -> tuple[str, str, list[tuple[str, str]]]:
-    required = ["RENDER_API_KEY", "RENDER_COMMIT_SHA"] + [
-        f"RENDER_{name}_SERVICE_ID" for name in SERVICES
-    ]
+    required = ["RENDER_API_KEY", "RENDER_COMMIT_SHA", "RENDER_SERVICE_ID"]
     missing = [name for name in required if not environment.get(name, "").strip()]
     if missing:
         raise DeploymentError("Set required deployment variables: " + ", ".join(missing))
     commit = environment["RENDER_COMMIT_SHA"].strip()
     if not re.fullmatch(r"[a-fA-F0-9]{40}", commit):
         raise DeploymentError("RENDER_COMMIT_SHA must be a full Git commit SHA")
-    services = [(name, environment[f"RENDER_{name}_SERVICE_ID"].strip()) for name in SERVICES]
+    services = [("WORDLE", environment["RENDER_SERVICE_ID"].strip())]
     if any(not re.fullmatch(r"srv-[a-zA-Z0-9]+", identifier) for _, identifier in services):
         raise DeploymentError("Service IDs must start with srv- and contain letters/digits")
-    if len({identifier for _, identifier in services}) != len(SERVICES):
-        raise DeploymentError("Each Render service must have a different service ID")
     return environment["RENDER_API_KEY"].strip(), commit, services
 
 
@@ -106,8 +101,7 @@ def main() -> int:
     try:
         token, commit, services = configuration(os.environ)
         client = RenderClient(token)
-        # API startup applies locked migrations before new workers start.
-        # Migrations must remain compatible with the previous running release.
+        # The combined process applies migrations before starting its children.
         for name, service in services:
             client.deploy(name, service, commit)
         print("All Render services are live at the tested commit.", flush=True)

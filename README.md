@@ -258,43 +258,45 @@ Backend OpenAPI is generated from safe response schemas. The React client import
 
 Use PostgreSQL pg_dump/restore tooling for backups. A destructive schema rollback requires a tested restore or reviewed down migration. Routine restarts/redeployments preserve data and pending work.
 
-The supported production layout is separate always-on API, worker, scheduler and frontend services. Render Free sleeping cannot meet reliable scheduling; `render.yaml` targets paid compute with external Supabase. Supply the common secrets consistently to all backend services and set the frontend's PUBLIC_URL as the Slack redirect origin.
+Render uses one Docker web service containing the API, React frontend, worker and
+scheduler, with external Supabase. `render.yaml` defaults to Free compute. While the
+service sleeps, background processing stops; exact-time reports and instant Slack
+responses are not guaranteed. Upgrade the same service to always-on compute when
+those guarantees matter. Local Compose can still run the components separately.
 
 ## Render CI/CD
 
 Pull requests run CI only. After a merge (or direct push) to `main`, the same workflow
-deploys only after **all checks pass**. It deploys the tested commit SHA in this order:
-API → worker → scheduler → admin frontend. Each service must become live before the
-next deploy starts. Failed builds, failed startups and timeouts fail the deployment job.
+deploys only after **all checks pass**. It deploys the tested commit SHA to one Render
+web service. Failed builds, failed startups and timeouts fail the deployment job.
 Production deployments are serialized; an active release is allowed to finish.
 
 One-time setup:
 
 1. Create a Render Blueprint from this repository using `render.yaml` on `main`.
-   It provisions **four paid Starter services**. Review those costs before applying.
-   Existing services can also be used; set their linked branch to `main` and
+   It provisions **one Free Docker web service**, named `wordle`.
+   An existing web service can also be used; set its linked branch to `main`,
+   Dockerfile Path to `./Dockerfile`, Docker Command to `wordle-bot combined`,
+   Health Check Path to `/health/ready`, and
    **Auto-Deploy to Off** so GitHub controls releases without duplicate deploys.
 2. Configure runtime secrets in Render's `wordle-platform-common` environment group:
    `DATABASE_URL`, `JWT_SECRET_KEY`, `CREDENTIAL_ENCRYPTION_KEYS`,
    `SLACK_SIGNING_SECRET`, `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, and `PUBLIC_URL`.
-   `PUBLIC_URL` is the admin frontend's HTTPS URL. If migration and runtime credentials
+   `PUBLIC_URL` is this single service's HTTPS URL. If migration and runtime credentials
    differ, also add `MIGRATION_DATABASE_URL`. Keep existing keys on redeployment.
    Application secrets stay in Render; GitHub needs only deployment credentials.
-3. Create a Render API key in Account Settings and copy each service ID (`srv-...`)
+3. Create a Render API key in Account Settings and copy the service ID (`srv-...`)
    from its dashboard URL. Create a GitHub environment named `production` using the
    repository Settings → Environments page, or the shell commands below.
-4. Add `RENDER_API_KEY` as an environment **secret** and the four service IDs as
-   environment **variables** in GitHub's `production` environment.
+4. Add `RENDER_API_KEY` as an environment **secret** and `RENDER_SERVICE_ID` as an
+   environment **variable** in GitHub's `production` environment.
 
 Configure GitHub from a terminal with the GitHub CLI (`gh auth login` first):
 
 ```bash
 gh api --method PUT repos/{owner}/{repo}/environments/production
 gh secret set RENDER_API_KEY --env production  # interactive, hidden input
-gh variable set RENDER_API_SERVICE_ID --env production --body 'srv-YOUR_API_ID'
-gh variable set RENDER_WORKER_SERVICE_ID --env production --body 'srv-YOUR_WORKER_ID'
-gh variable set RENDER_SCHEDULER_SERVICE_ID --env production --body 'srv-YOUR_SCHEDULER_ID'
-gh variable set RENDER_ADMIN_SERVICE_ID --env production --body 'srv-YOUR_ADMIN_ID'
+gh variable set RENDER_SERVICE_ID --env production --body 'srv-YOUR_SERVICE_ID'
 ```
 
 Protect `main` with a rule requiring the `checks` job before merging. GitHub environment
@@ -306,7 +308,7 @@ For a manual deploy from your shell using the same script:
 
 ```bash
 cp .env.render.example .env.render
-# Edit .env.render with your Render API key and four service IDs.
+# Edit .env.render with your Render API key and service ID.
 # This file is ignored by Git. Never commit deployment credentials.
 set -a
 source .env.render
@@ -322,12 +324,31 @@ not run tests or check GitHub results; automatic deployments enforce CI through
 `needs: checks`. Avoid a manual deploy while the GitHub production job is running.
 Neither command creates services or replaces their runtime environment variables.
 
-API startup runs advisory-lock-protected migrations before serving; deploys stop if
-that startup fails. Use additive migrations compatible with the previous release,
-because services roll out sequentially. A failed release can leave services on mixed
-versions; inspect Render before retrying. The script never automatically repeats a
+Container startup runs advisory-lock-protected migrations once, then supervises
+Gunicorn, the worker and the scheduler. If a child exits, the container shuts down so
+Render can restart it. React assets and client routes are served by the API on the
+same port, with no frontend proxy or second service. Use additive migrations compatible
+with the previous release during rollout. The script never automatically repeats a
 deployment POST or rolls back database migrations. Inspect both GitHub Actions and
 Render deploy logs, fix the failure, then deploy a known tested commit again.
+
+To run the same single-service image locally against your configured database:
+
+```bash
+docker build -t wordle:local .
+docker run --name wordle-single --rm --env-file .env \
+  -e PUBLIC_URL=http://localhost:8000 -e COOKIE_SECURE=false -p 8000:8000 wordle:local
+```
+
+Use a database URL reachable from inside the container (not host `localhost`). Open
+`http://localhost:8000` for the admin UI; API and Slack URLs use the same origin.
+For an initial admin on Render Free, which has no dashboard shell, run
+`uv run --frozen wordle-bot admin-bootstrap` locally with your Supabase environment
+configured; this writes the admin to the shared database. Use the Render service URL
+for Slack events (`/slack/events`), commands (`/slack/commands`) and the OAuth callback
+(`/slack/oauth/callback`). If upgrading an existing four-service Blueprint, review
+Render's proposed changes and migrate deliberately; this code does not delete existing
+services. For current Free limits, see [Render Free docs](https://render.com/docs/free).
 
 Render API reference: [deploy a specific commit](https://render.com/docs/deploys#deploying-a-specific-commit)
 and [disable automatic deploys](https://render.com/docs/blueprint-spec#autodeploytrigger).

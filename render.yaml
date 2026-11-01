@@ -29,51 +29,15 @@ envVarGroups:
         sync: false
 services:
   - type: web
-    name: wordle-api
+    name: wordle
     branch: main
     autoDeployTrigger: 'off'
     runtime: docker
-    plan: starter
+    plan: free
     dockerfilePath: ./Dockerfile
-    dockerCommand: wordle-bot serve
+    dockerCommand: wordle-bot combined
     healthCheckPath: /health/ready
     envVars:
       - fromGroup: wordle-platform-common
       - key: PORT
         value: "8000"
-  - type: worker
-    name: wordle-worker
-    branch: main
-    autoDeployTrigger: 'off'
-    runtime: docker
-    plan: starter
-    dockerfilePath: ./Dockerfile
-    dockerCommand: wordle-bot worker
-    envVars:
-      - fromGroup: wordle-platform-common
-  - type: worker
-    name: wordle-scheduler
-    branch: main
-    autoDeployTrigger: 'off'
-    runtime: docker
-    plan: starter
-    dockerfilePath: ./Dockerfile
-    dockerCommand: wordle-bot scheduler
-    envVars:
-      - fromGroup: wordle-platform-common
-  - type: web
-    name: wordle-admin
-    branch: main
-    autoDeployTrigger: 'off'
-    runtime: docker
-    plan: starter
-    dockerfilePath: ./infra/admin.Dockerfile
-    healthCheckPath: /health/live
-    envVars:
-      - key: API_UPSTREAM
-        fromService:
-          type: web
-          name: wordle-api
-          property: hostport
-      - key: PORT
-        value: "8080"

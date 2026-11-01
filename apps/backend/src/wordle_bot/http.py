@@ -93,10 +93,16 @@ def create_app(settings: Settings | None = None, queue: JobQueue | None = None) 
                 return Response("Invalid Slack signature", status=401)
         return None
 
-    @app.get("/")
     @app.get("/health/live")
     def live() -> Response:
         return jsonify(status="ok")
+
+    if settings.admin_panel_enabled and settings.frontend_dir:
+        from wordle_bot.frontend import register_frontend
+
+        register_frontend(app, settings.frontend_dir)
+    else:
+        app.add_url_rule("/", view_func=live)
 
     @app.get("/health/ready")
     def ready() -> tuple[Response, int]:

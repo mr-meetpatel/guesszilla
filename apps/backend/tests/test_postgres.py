@@ -218,14 +218,24 @@ def test_http_worker_roundtrip(repository, database, settings):
 
 
 @pytest.mark.e2e
-def test_combined_startup_and_graceful_shutdown(repository, database, settings, tmp_path):
+@pytest.mark.parametrize("platform_mode", [False, True])
+def test_combined_startup_and_graceful_shutdown(
+    repository, database, settings, tmp_path, platform_mode
+):
+    from cryptography.fernet import Fernet
+
+    (tmp_path / "index.html").write_text("<html>Wordle admin</html>")
     with socket.socket() as socket_probe:
         socket_probe.bind(("127.0.0.1", 0))
         port = socket_probe.getsockname()[1]
     environment = {
         **os.environ,
         "DB_BACKEND": "local",
-        "ADMIN_PANEL_ENABLED": str(settings.admin_panel_enabled).lower(),
+        "ADMIN_PANEL_ENABLED": str(platform_mode).lower(),
+        "FRONTEND_DIR": str(tmp_path),
+        "JWT_SECRET_KEY": "s" * 64,
+        "CREDENTIAL_ENCRYPTION_KEYS": Fernet.generate_key().decode(),
+        "PERSIST_LOGS": "false",
         "DATABASE_URL": database[0].database_url.get_secret_value(),
         "SLACK_BOT_TOKEN": settings.slack_bot_token.get_secret_value(),
         "SLACK_SIGNING_SECRET": settings.slack_signing_secret.get_secret_value(),
@@ -257,6 +267,10 @@ def test_combined_startup_and_graceful_shutdown(repository, database, settings, 
                     time.sleep(0.1)
             else:
                 pytest.fail("Combined runtime did not become ready: " + logfile.read_text())
+            if platform_mode:
+                with urlopen(f"http://127.0.0.1:{port}/workspaces", timeout=2) as response:
+                    assert b"Wordle admin" in response.read()
+                assert "Scheduler started" in logfile.read_text()
         finally:
             process.terminate()
             process.wait(timeout=15)
