@@ -113,15 +113,16 @@ class PlatformTasks:
             self.record_message(job.payload)
         else:
             raise ValueError("Unknown task kind")
-        with Session(self.engine) as db, db.begin():
-            db.add(
-                Event(
-                    category="job",
-                    action="job.done",
-                    target=str(job.id),
-                    details={"kind": job.kind, "attempts": job.attempts},
+        if self.settings.persist_logs:
+            with Session(self.engine) as db, db.begin():
+                db.add(
+                    Event(
+                        category="job",
+                        action="job.done",
+                        target=str(job.id),
+                        details={"kind": job.kind, "attempts": job.attempts},
+                    )
                 )
-            )
 
     def record_message(self, payload: dict[str, Any]) -> None:
         result = parse_wordle(payload["text"])

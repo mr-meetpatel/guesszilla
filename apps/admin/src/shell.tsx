@@ -47,6 +47,7 @@ const navigation = [
   ['/logs', 'Logs & audit', Activity],
   ['/administration', 'Administration', Settings2],
 ] as const;
+const persistLogs = import.meta.env.VITE_PERSIST_LOGS === 'true';
 
 export function App() {
   const client = useQueryClient();
@@ -141,12 +142,14 @@ function Layout({ user }: { user: User }) {
           </NavLink>
           <div className="workspace-label">YOUR CONTROL ROOM</div>
           <nav>
-            {navigation.map(([path, text, Icon]) => (
-              <NavLink key={path} to={path} end={path === '/'} onClick={() => setMobile(false)}>
-                <Icon size={18} />
-                {text}
-              </NavLink>
-            ))}
+            {navigation
+              .filter(([path]) => persistLogs || path !== '/logs')
+              .map(([path, text, Icon]) => (
+                <NavLink key={path} to={path} end={path === '/'} onClick={() => setMobile(false)}>
+                  <Icon size={18} />
+                  {text}
+                </NavLink>
+              ))}
           </nav>
           <div className="sidebar-bottom">
             <div className="secure-note">
@@ -243,7 +246,10 @@ function Layout({ user }: { user: User }) {
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/schedules" element={<SchedulesPage />} />
               <Route path="/jobs" element={<JobsPage />} />
-              <Route path="/logs" element={<LogsPage />} />
+              <Route
+                path="/logs"
+                element={persistLogs ? <LogsPage /> : <Navigate to="/" replace />}
+              />
               <Route path="/administration" element={<AdministrationPage user={user} />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

@@ -256,20 +256,21 @@ class OutboxDispatcher:
                 if "failed" in states
                 else "pending"
             )
-            db.add(
-                Event(
-                    category="delivery",
-                    action="delivery." + status,
-                    target=delivery.id,
-                    level="ERROR" if status in {"failed", "uncertain"} else "INFO",
-                    details={
-                        "report_id": report.id,
-                        "part": delivery.part,
-                        "attempt": delivery.attempts,
-                        "error_code": error,
-                    },
+            if self.settings.persist_logs:
+                db.add(
+                    Event(
+                        category="delivery",
+                        action="delivery." + status,
+                        target=delivery.id,
+                        level="ERROR" if status in {"failed", "uncertain"} else "INFO",
+                        details={
+                            "report_id": report.id,
+                            "part": delivery.part,
+                            "attempt": delivery.attempts,
+                            "error_code": error,
+                        },
+                    )
                 )
-            )
 
     def tick(self) -> bool:
         now = utcnow()

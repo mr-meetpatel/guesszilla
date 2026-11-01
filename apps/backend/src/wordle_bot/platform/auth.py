@@ -30,6 +30,12 @@ from wordle_bot.platform.models import Admin, AdminSession, Event, LoginBucket, 
 
 passwords = PasswordHasher()
 _dummy_hash = passwords.hash("not-a-real-admin-password")
+_audit_enabled = False
+
+
+def configure_audit(enabled: bool) -> None:
+    global _audit_enabled
+    _audit_enabled = enabled
 
 
 def digest(value: str) -> str:
@@ -58,6 +64,8 @@ def audit(
     workspace: str | None = None,
     details: dict[str, Any] | None = None,
 ) -> None:
+    if not _audit_enabled:
+        return
     session.add(
         Event(
             category="audit",
@@ -83,6 +91,7 @@ def protected(function: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def register_auth(app: Any, settings: Settings, engine: Engine) -> None:
+    configure_audit(settings.persist_logs)
     app.config.update(
         JWT_SECRET_KEY=settings.jwt_secret_key.get_secret_value(),
         JWT_TOKEN_LOCATION=["cookies"],

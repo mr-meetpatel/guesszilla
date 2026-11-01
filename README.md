@@ -182,7 +182,11 @@ Report jobs must use the panel's receipt-aware delivery controls, not generic re
 | APP_TIMEZONE | Default timezone for compatibility mode; managed channels have their own |
 | WORKER_POLL_SECONDS / JOB_LEASE_SECONDS | Queue polling interval and recovery lease |
 | WEB_WORKERS / DB_POOL_SIZE | Per-service processes and bounded per-process connection pool |
-| PERSIST_LOGS | Enables asynchronous application log persistence |
+| PERSIST_LOGS | Enables database log/audit persistence (default: `false`) |
+
+The admin frontend also hides the Logs & audit screen by default. Set
+`VITE_PERSIST_LOGS=true` at frontend build time to expose it when backend
+`PERSIST_LOGS=true` is enabled.
 | FRONTEND_PORT / API_PORT / DB_HOST_PORT | Local Compose host port mappings |
 
 All environment values override `.env`. Back up encryption keys alongside the database. To rotate signing keys, revoke sessions and deploy a new key to all API replicas in a coordinated rollout. For credential encryption, deploy a keyring containing the new key first and old keys after it; retain the old keys until credentials have been re-encrypted/reconnected and every replica has restarted.

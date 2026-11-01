@@ -34,7 +34,8 @@ class Settings(BaseSettings):
     credential_encryption_keys: SecretStr = SecretStr("")
     public_url: str = "http://localhost:8080"
     cookie_secure: bool = True
-    persist_logs: bool = True
+    # Database log/audit retention is opt-in to keep hosted free tiers small.
+    persist_logs: bool = False
     slack_client_id: str = ""
     slack_client_secret: SecretStr = SecretStr("")
 
