@@ -4,6 +4,7 @@ import { type FormEvent } from 'react';
 import { api, write, type Envelope, type User } from '../api';
 import { ActionFeedback, Confirm, dateTime, Modal, useAction } from '../ui';
 import { Panel, Status, Table, Title } from './shared';
+import { CleanupForm } from './maintenance';
 
 interface AdminRow {
   id: string;
@@ -105,6 +106,18 @@ export function AdministrationPage({ user }: { user: User }) {
       </Panel>
       {!user.must_change_password && (
         <>
+          <Panel
+            title="Event storage"
+            caption="Clear global event logs and audit history to manage database storage."
+          >
+            <Modal
+              title="Clear all events"
+              description="Permanent removal across every workspace."
+              trigger={<button>Clear all events</button>}
+            >
+              <CleanupForm />
+            </Modal>
+          </Panel>
           <Panel title="Super-administrators" caption="The last active admin cannot be disabled.">
             <Table
               rows={admins.data?.data || []}

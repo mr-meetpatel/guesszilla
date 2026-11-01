@@ -64,7 +64,7 @@ def test_idempotent_migrations_preserve_records(database, repository):
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT version_num FROM wordle_bot.alembic_version")).scalar()
-            == "0002"
+            == "0004"
         )
         assert (
             connection.execute(

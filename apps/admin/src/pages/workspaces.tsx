@@ -6,6 +6,7 @@ import { api, write, type Channel, type Envelope, type Rules } from '../api';
 import { useScope } from '../shell';
 import { ActionFeedback, Confirm, dateTime, Empty, ErrorBox, Modal, useAction } from '../ui';
 import { DayPicker, Panel, Status, Table, Timezone, Title } from './shared';
+import { CleanupForm } from './maintenance';
 
 export function WorkspacesPage() {
   const { workspaces, channels, workspace } = useScope();
@@ -64,6 +65,13 @@ export function WorkspacesPage() {
                 description="Remove the stored bot credential, stop tracking and pause schedules. Pending unsent reports are cancelled; historical records and uncertain receipts remain. A request already in flight may finish. Reconnect through Slack OAuth to restore access."
                 onConfirm={() => write('/workspaces/' + w.id, {}, 'DELETE')}
               />
+              <Modal
+                title={`Clear ${w.name} history`}
+                description="Permanent removal of workspace game data."
+                trigger={<button>Clear game history</button>}
+              >
+                <CleanupForm workspaceId={w.id} />
+              </Modal>
             </div>
           </div>
         ))}

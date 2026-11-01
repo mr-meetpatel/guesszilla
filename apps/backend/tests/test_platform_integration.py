@@ -71,6 +71,118 @@ def login(client):
     return {"X-CSRF-TOKEN": client.get_cookie("csrf_access_token").value}
 
 
+def test_cleanup_requires_confirmation_and_preserves_other_workspace(platform):
+    from wordle_bot.repositories.models import Participation
+
+    settings, engine = platform
+    channel_id = seed_channel(settings, engine)
+    with Session(engine) as db, db.begin():
+        db.add(Participant(channel_id=channel_id, user_id="U1", name="Amy"))
+        db.add(Participation(team_id="T1", channel_id="C1", user_id="U1", day=date(2026, 10, 30)))
+        db.add(
+            Participation(team_id="OTHER", channel_id="OTHER", user_id="U2", day=date(2026, 10, 30))
+        )
+    report = ReportService(settings, engine).request_report(
+        channel_id, date(2026, 10, 26), date(2026, 10, 30), "cleanup-test", "test"
+    )
+    with Session(engine) as db, db.begin():
+        schedule = Schedule(
+            channel_id=channel_id,
+            name="Weekly",
+            frequency="weekly",
+            weekdays=[4],
+            wall_time="17:00",
+            timezone="Asia/Kolkata",
+            window="current_week",
+            next_at=datetime.now(UTC),
+            paused=False,
+        )
+        db.add(schedule)
+        db.flush()
+        db.add(
+            Occurrence(
+                schedule_id=schedule.id,
+                scheduled_at=datetime.now(UTC),
+                status="queued",
+                report_id=report["id"],
+            )
+        )
+    client = create_app(settings).test_client()
+    headers = login(client)
+    payload = {"confirmation": "T1", "password": "a-test-password-123"}
+    assert (
+        client.post("/api/v1/workspaces/T1/cleanup", headers=headers, json=payload).status_code
+        == 409
+    )
+    client.patch("/api/v1/workspaces/T1", headers=headers, json={"active": False})
+    assert (
+        client.post(
+            "/api/v1/workspaces/T1/cleanup", headers=headers, json={**payload, "password": "wrong"}
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post("/api/v1/workspaces/T1/cleanup", headers=headers, json=payload).status_code
+        == 200
+    )
+    with Session(engine) as db:
+        assert db.get(Channel, channel_id) is not None
+        assert db.get(Workspace, "T1") is not None
+        assert list(db.scalars(select(Participant))) == []
+        assert list(db.scalars(select(Report))) == []
+        assert list(db.scalars(select(Delivery))) == []
+        assert list(db.scalars(select(Occurrence))) == []
+        assert db.scalar(select(Schedule)).paused is True
+        assert list(db.scalars(select(Participation.team_id))) == ["OTHER"]
+    assert (
+        client.post(
+            "/api/v1/maintenance/events/cleanup",
+            headers=headers,
+            json={"confirmation": "DELETE EVENTS", "password": "a-test-password-123"},
+        ).status_code
+        == 200
+    )
+
+
+@pytest.mark.parametrize("in_flight", ["running", "uncertain"])
+def test_cleanup_blocks_in_flight_work(platform, in_flight):
+    from wordle_bot.platform.models import utcnow
+    from wordle_bot.repositories.models import Job
+
+    settings, engine = platform
+    channel_id = seed_channel(settings, engine)
+    ReportService(settings, engine).request_report(
+        channel_id, date(2026, 10, 26), date(2026, 10, 30), "in-flight", "test"
+    )
+    with Session(engine) as db, db.begin():
+        db.get(Workspace, "T1").active = False
+        if in_flight == "uncertain":
+            db.scalar(select(Delivery)).status = "uncertain"
+        else:
+            db.add(
+                Job(
+                    delivery_key="event:T1:test",
+                    kind="message",
+                    payload={"channel_id": channel_id},
+                    status="running",
+                    attempts=1,
+                    available_at=utcnow(),
+                    created_at=utcnow(),
+                )
+            )
+    client = create_app(settings).test_client()
+    headers = login(client)
+    response = client.post(
+        "/api/v1/workspaces/T1/cleanup",
+        headers=headers,
+        json={"confirmation": "T1", "password": "a-test-password-123"},
+    )
+    assert response.status_code == 409
+    with Session(engine) as db:
+        assert len(list(db.scalars(select(Report)))) == 1
+        assert len(list(db.scalars(select(Delivery)))) == 1
+
+
 def test_auth_csrf_revocation_and_protected_routes(platform):
     app = create_app(platform[0])
     client = app.test_client()
@@ -419,6 +531,8 @@ def test_all_admin_routes_require_jwt(platform):
                 if "PATCH" in rule.methods
                 else "DELETE"
                 if "DELETE" in rule.methods
+                else "PUT"
+                if "PUT" in rule.methods
                 else "POST"
             )
             assert client.open(path, method=method, json={}).status_code == 401, path

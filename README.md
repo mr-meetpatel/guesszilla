@@ -113,6 +113,14 @@ Alembic manages the same private wordle_bot schema on both backends. Tables have
 
 ## Reports and participation
 
+### Storage cleanup
+
+To reset a workspace's game data, pause it and choose **Clear game history** on its workspace card. Enter its workspace ID and your current admin password. This permanently removes attempts, participants, reports, receipts, idempotency records, related jobs/events and schedule run history. Connections, channel configuration, passwords and schedule definitions are retained; schedules are paused. Running jobs or sending/uncertain deliveries block cleanup. Resolve these through the normal job/delivery controls before retrying. Deleting historical receipts resets duplicate-report protection for those periods. Messages already sent to Slack are not removed. Resume the workspace and explicitly re-enable schedules when ready.
+
+In **Administration → Event storage → Clear all events**, type `DELETE EVENTS` and enter your current admin password to clear global event/log/audit history. One cleanup audit record is retained and new events continue to be recorded. Neither action removes administrator accounts or sessions. Cleanup runs in a transaction; the endpoints require JWT authentication and CSRF protection. Slack client ID and secret remain configured through `SLACK_CLIENT_ID` and `SLACK_CLIENT_SECRET` in the server environment.
+
+For installations that ran the withdrawn database-backed OAuth settings revision, migration `0004` removes its settings table and OAuth credential column. Fresh installations never create that storage. Configure the Slack app credentials in the environment before upgrading; workspace bot connections and game history are preserved.
+
 Channel settings control timezone, eligible weekdays, royalty threshold, announcement, title and reaction mapping. The default reactions are fire for 1–2 guesses, tada for 3–6 and thumbsup for X. Future participation dates derive from UTC Slack timestamps in the configured timezone; legacy dates are preserved as recorded.
 
 Sync human channel members, include/exclude participants, then inspect the calendar. The participation ratio is eligible roster members with at least one credited day divided by eligible roster size. An empty roster displays no ratio rather than dividing by zero. Players are sorted case-insensitively by display name.

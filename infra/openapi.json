@@ -1072,6 +1072,21 @@
         ]
       }
     },
+    "/api/v1/maintenance/events/cleanup": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/api/v1/openapi.json": {
       "get": {
         "responses": {
@@ -1417,6 +1432,32 @@
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/cleanup": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "workspace_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"

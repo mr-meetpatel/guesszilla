@@ -720,6 +720,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/maintenance/events/cleanup': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        default: components['responses']['DEFAULT_ERROR'];
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/openapi.json': {
     parameters: {
       query?: never;
@@ -1193,6 +1227,44 @@ export interface paths {
         default: components['responses']['DEFAULT_ERROR'];
       };
     };
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/cleanup': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          workspace_id: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        default: components['responses']['DEFAULT_ERROR'];
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/v1/workspaces/{workspace_id}/sync': {

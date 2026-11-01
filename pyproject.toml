@@ -34,7 +34,7 @@ module = ["flask_smorest"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["wordle_bot.platform.api", "wordle_bot.platform.auth"]
+module = ["wordle_bot.platform.api", "wordle_bot.platform.auth", "wordle_bot.platform.maintenance"]
 # These two third-party libraries do not ship typed route/JWT decorators.
 disable_error_code = ["untyped-decorator"]
 

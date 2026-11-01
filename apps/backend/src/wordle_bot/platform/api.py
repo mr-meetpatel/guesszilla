@@ -811,6 +811,9 @@ def register_api(app: Any, settings: Settings, engine: Engine) -> None:
     def spec() -> Any:
         return jsonify(api.spec.to_dict())
 
+    from wordle_bot.platform.maintenance import register_maintenance
+
+    register_maintenance(blueprint, engine)
     api.register_blueprint(blueprint)
 
 
