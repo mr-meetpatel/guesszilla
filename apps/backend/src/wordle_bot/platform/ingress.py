@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from wordle_bot.config import Settings
 from wordle_bot.domain import parse_wordle
 from wordle_bot.platform.auth import audit, passwords, verify_password
-from wordle_bot.platform.models import Channel, Event, Workspace
+from wordle_bot.platform.models import Channel, Event, Participant, Workspace
 from wordle_bot.platform.oauth import SlackInstallations
 from wordle_bot.platform.reports import ReportService, crypto
 from wordle_bot.platform.rules import ReportRules, resolve_window
@@ -127,6 +127,22 @@ class PlatformTasks:
         result = parse_wordle(payload["text"])
         if not result:
             return
+        # Fetch a profile only for a new participant, without holding a database
+        # transaction open during Slack's network request.
+        name = payload["user"]
+        with Session(self.engine) as db:
+            channel = db.get(Channel, payload["channel_id"])
+            workspace = db.get(Workspace, channel.workspace_id) if channel else None
+            if not channel or not channel.active or not workspace or not workspace.active:
+                return
+            workspace_id = workspace.id
+            missing = db.get(Participant, (channel.id, payload["user"])) is None
+        if missing:
+            user = self.installations.client(workspace_id).users_info(user=payload["user"])["user"]
+            if user.get("is_bot") or user.get("is_app_user") or user.get("deleted"):
+                return
+            profile = user.get("profile", {})
+            name = (profile.get("display_name") or profile.get("real_name") or name)[:160]
         with Session(self.engine) as db, db.begin():
             channel = db.get(Channel, payload["channel_id"])
             if not channel or not channel.active:
@@ -137,6 +153,13 @@ class PlatformTasks:
             rules = ReportRules(**channel.rules)
             timestamp = datetime.fromtimestamp(float(payload["ts"]), UTC)
             day = timestamp.astimezone(ZoneInfo(rules.timezone)).date()
+            db.execute(
+                insert(Participant)
+                .values(channel_id=channel.id, user_id=payload["user"], name=name)
+                .on_conflict_do_nothing(
+                    index_elements=[Participant.channel_id, Participant.user_id]
+                )
+            )
             db.execute(
                 insert(Participation)
                 .values(

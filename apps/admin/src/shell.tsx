@@ -101,7 +101,9 @@ function Layout({ user }: { user: User }) {
   const client = useQueryClient();
   const notify = useContext(Notices);
   const location = useLocation();
-  const [workspaceId, setWorkspaceId] = useState('');
+  const [workspaceId, setWorkspaceId] = useState(
+    () => new URLSearchParams(location.search).get('workspace_id') || '',
+  );
   const [channelId, setChannelId] = useState('');
   const [mobile, setMobile] = useState(false);
   const workspaces = useQuery({

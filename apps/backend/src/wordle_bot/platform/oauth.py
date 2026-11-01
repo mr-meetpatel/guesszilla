@@ -25,6 +25,7 @@ from wordle_bot.platform.models import (
 )
 from wordle_bot.platform.reports import crypto
 from wordle_bot.platform.rules import ReportRules
+from wordle_bot.repositories.models import Job
 
 SCOPES = (
     "channels:read,channels:history,groups:read,groups:history,users:read,"
@@ -116,7 +117,23 @@ class SlackInstallations:
                 workspace.scopes = result.get("scope", "")
                 workspace.updated_at = utcnow()
                 audit(db, "workspace.connected", actor=actor, workspace=workspace.id)
-            return redirect("/workspaces?oauth=connected")
+                # Persist discovery with the installation so worker restarts cannot
+                # leave a successful connection without channel discovery.
+                now = utcnow()
+                db.add(
+                    Job(
+                        delivery_key="oauth-discover:" + digest(request.args["state"]),
+                        kind="workspace_sync",
+                        payload={"workspace_id": workspace.id},
+                        status="pending",
+                        attempts=0,
+                        available_at=now,
+                        created_at=now,
+                    )
+                )
+            return redirect(
+                "/workspaces?" + urlencode({"oauth": "connected", "workspace_id": team["id"]})
+            )
 
         app.register_blueprint(blueprint)
 

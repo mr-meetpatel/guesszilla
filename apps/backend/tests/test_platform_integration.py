@@ -442,6 +442,108 @@ def test_oauth_state_replay_and_revoked_session(platform):
     assert client.get("/slack/oauth/callback?state=unrecognized&code=fake").status_code == 400
 
 
+def test_oauth_connect_queues_discovery_and_selects_workspace(platform, monkeypatch):
+    from wordle_bot.repositories.models import Job
+
+    settings, engine = platform
+    client = create_app(settings).test_client()
+    login(client)
+    with Session(engine) as db, db.begin():
+        session = db.scalar(select(AdminSession))
+        db.add(
+            OAuthState(
+                digest=digest("connect-state"),
+                session_id=session.id,
+                expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            )
+        )
+    slack = Mock()
+    slack.oauth_v2_access.return_value = {
+        "team": {"id": "TNEW", "name": "New workspace"},
+        "access_token": "xoxb-new",
+        "bot_user_id": "BNEW",
+    }
+    monkeypatch.setattr("wordle_bot.platform.oauth.WebClient", lambda **kwargs: slack)
+    response = client.get("/slack/oauth/callback?state=connect-state&code=fake")
+    assert response.status_code == 302
+    assert response.location == "/workspaces?oauth=connected&workspace_id=TNEW"
+    with Session(engine) as db:
+        assert db.get(Workspace, "TNEW") is not None
+        job = db.scalar(select(Job).where(Job.kind == "workspace_sync"))
+        assert job.payload == {"workspace_id": "TNEW"}
+    assert client.get("/slack/oauth/callback?state=connect-state&code=fake").status_code == 400
+    with Session(engine) as db:
+        assert len(list(db.scalars(select(Job)))) == 1
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_wordle_submission_registers_missing_participant_once(platform, monkeypatch, existing):
+    from conftest import wordle_text
+
+    from wordle_bot.platform.ingress import PlatformTasks
+    from wordle_bot.platform.oauth import SlackInstallations
+    from wordle_bot.repositories.models import Participation
+
+    settings, engine = platform
+    channel_id = seed_channel(settings, engine)
+    if existing:
+        with Session(engine) as db, db.begin():
+            db.add(
+                Participant(channel_id=channel_id, user_id="U1", name="Existing", included=False)
+            )
+    slack = Mock()
+    slack.users_info.return_value = {"user": {"id": "U1", "profile": {"display_name": "Amy"}}}
+    monkeypatch.setattr(SlackInstallations, "client", lambda *args: slack)
+    tasks = PlatformTasks(settings, engine)
+    payload = {"channel_id": channel_id, "user": "U1", "ts": "1790856000", "text": wordle_text()}
+    tasks.record_message({**payload, "text": "Hello"})
+    slack.users_info.assert_not_called()
+    tasks.record_message(payload)
+    tasks.record_message(payload)
+    with Session(engine) as db:
+        roster = list(db.scalars(select(Participant)))
+        assert len(roster) == 1
+        assert roster[0].name == ("Existing" if existing else "Amy")
+        assert roster[0].included is (not existing)
+        assert len(list(db.scalars(select(Participation)))) == 1
+    if existing:
+        slack.users_info.assert_not_called()
+    else:
+        slack.users_info.assert_called_once_with(user="U1")
+
+
+def test_concurrent_first_wordle_submissions_register_one_player(platform, monkeypatch):
+    from threading import Barrier
+
+    from conftest import wordle_text
+
+    from wordle_bot.platform.ingress import PlatformTasks
+    from wordle_bot.platform.oauth import SlackInstallations
+    from wordle_bot.repositories.models import Participation
+
+    settings, engine = platform
+    channel_id = seed_channel(settings, engine)
+    barrier = Barrier(2)
+    slack = Mock()
+
+    def profile(**kwargs):
+        barrier.wait(timeout=5)
+        return {"user": {"profile": {"display_name": "Amy"}}}
+
+    slack.users_info.side_effect = profile
+    monkeypatch.setattr(SlackInstallations, "client", lambda *args: slack)
+    payload = {"channel_id": channel_id, "user": "U1", "ts": "1790856000", "text": wordle_text()}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [
+            pool.submit(PlatformTasks(settings, engine).record_message, payload) for _ in range(2)
+        ]
+        for future in futures:
+            future.result(timeout=10)
+    with Session(engine) as db:
+        assert len(list(db.scalars(select(Participant)))) == 1
+        assert len(list(db.scalars(select(Participation)))) == 1
+
+
 def test_last_admin_and_stale_settings_are_protected(platform):
     settings, engine = platform
     channel_id = seed_channel(settings, engine)

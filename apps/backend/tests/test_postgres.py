@@ -225,6 +225,7 @@ def test_combined_startup_and_graceful_shutdown(repository, database, settings, 
     environment = {
         **os.environ,
         "DB_BACKEND": "local",
+        "ADMIN_PANEL_ENABLED": str(settings.admin_panel_enabled).lower(),
         "DATABASE_URL": database[0].database_url.get_secret_value(),
         "SLACK_BOT_TOKEN": settings.slack_bot_token.get_secret_value(),
         "SLACK_SIGNING_SECRET": settings.slack_signing_secret.get_secret_value(),

@@ -1,13 +1,18 @@
 import { Globe2, Plus, RefreshCw } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
-import { write, type Channel, type Rules } from '../api';
+import { useSearchParams } from 'react-router-dom';
+import { api, write, type Channel, type Envelope, type Rules } from '../api';
 import { useScope } from '../shell';
-import { ActionFeedback, Confirm, dateTime, Empty, Modal, useAction } from '../ui';
+import { ActionFeedback, Confirm, dateTime, Empty, ErrorBox, Modal, useAction } from '../ui';
 import { DayPicker, Panel, Status, Table, Timezone, Title } from './shared';
 
 export function WorkspacesPage() {
   const { workspaces, channels, workspace } = useScope();
   const action = useAction();
+  const [params, setParams] = useSearchParams();
+  const connectedWorkspace =
+    params.get('oauth') === 'connected' ? params.get('workspace_id') : null;
   return (
     <>
       <Title
@@ -30,6 +35,9 @@ export function WorkspacesPage() {
       >
         Connect Slack, discover channels, and decide where the game happens.
       </Title>
+      {connectedWorkspace && (
+        <ConnectChannel workspaceId={connectedWorkspace} onConnected={() => setParams({})} />
+      )}
       <div className="workspace-cards">
         {workspaces.map((w) => (
           <div className="workspace-card" key={w.id}>
@@ -63,7 +71,7 @@ export function WorkspacesPage() {
       )}
       <Panel
         title={workspace ? `Channels in ${workspace.name}` : 'Tracked channels'}
-        caption="Newly discovered channels start paused. Invite the bot before enabling tracking."
+        caption="Newly discovered channels start paused. Invite the bot before enabling tracking. Players join the roster automatically when they post a valid Wordle."
         action={
           workspace && (
             <button
@@ -106,6 +114,89 @@ export function WorkspacesPage() {
         />
       </Panel>
     </>
+  );
+}
+
+function ConnectChannel({
+  workspaceId,
+  onConnected,
+}: {
+  workspaceId: string;
+  onConnected: () => void;
+}) {
+  const action = useAction();
+  const [selected, setSelected] = useState('');
+  const query = useQuery({
+    queryKey: ['channels', workspaceId],
+    queryFn: () =>
+      api<Envelope<Channel[]>>('/channels?workspace_id=' + encodeURIComponent(workspaceId)),
+    // Discovery runs in the worker. Refresh only this onboarding screen while
+    // waiting for its first channels, and stop after 30 seconds.
+    refetchInterval: (query) =>
+      !query.state.data?.data.length &&
+      query.state.dataUpdateCount + query.state.errorUpdateCount < 15
+        ? 2000
+        : false,
+  });
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const channel = query.data?.data.find((item) => item.id === selected);
+    if (!channel) return;
+    const password = String(new FormData(event.currentTarget).get('password') || '');
+    action.mutate(async () => {
+      await write(
+        `/channels/${channel.id}`,
+        { version: channel.version, active: true, password },
+        'PATCH',
+      );
+      onConnected();
+    });
+  }
+  return (
+    <Panel
+      title="Choose a channel to connect"
+      caption="Invite the bot to your chosen channel in Slack. Private channels appear only after the bot is invited. New players are added when they share a valid Wordle attempt."
+    >
+      {query.error && <ErrorBox error={query.error} />}
+      <form onSubmit={submit}>
+        <label>
+          Slack channel
+          <select required value={selected} onChange={(event) => setSelected(event.target.value)}>
+            <option value="">Select a channel</option>
+            {query.data?.data.map((channel) => (
+              <option key={channel.id} value={channel.id}>
+                # {channel.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {!query.data?.data.length && (
+          <p role="status">
+            Waiting for channel discovery. If channels do not appear, check the background job and
+            use Discover channels below, then refresh.
+          </p>
+        )}
+        <label>
+          Slash-command password
+          <input
+            name="password"
+            type="password"
+            minLength={12}
+            maxLength={128}
+            required
+            autoComplete="new-password"
+          />
+        </label>
+        <p className="subtle">Use /send-stats followed by this password to request a report.</p>
+        <button type="submit" className="primary" disabled={!selected || action.isPending}>
+          Connect channel
+        </button>
+        <button type="button" onClick={() => query.refetch()} disabled={query.isFetching}>
+          Refresh channels
+        </button>
+        <ActionFeedback action={action} />
+      </form>
+    </Panel>
   );
 }
 

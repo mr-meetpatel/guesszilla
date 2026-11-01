@@ -77,7 +77,9 @@ Use `slack-app-manifest.yaml`, replacing YOUR_PUBLIC_HOST with your HTTPS hostna
 | Slash command `/send-stats` | https://YOUR_HOST/slack/commands |
 | OAuth redirect | https://YOUR_HOST/slack/oauth/callback |
 
-Copy the Slack app's signing secret, OAuth client ID and client secret into server configuration. In the panel choose Workspaces → Connect workspace, authorize Slack, then Discover channels. Invite the bot to a channel, configure its slash-command password, enable tracking and sync its roster.
+Copy the Slack app's signing secret, OAuth client ID and client secret into server configuration. In the panel choose Workspaces → Connect workspace and authorize Slack. The worker discovers channels automatically and the panel opens a channel selector for the connected workspace. Invite the bot to your chosen channel, select it, set its slash-command password and choose Connect channel. Private channels appear only after inviting the bot; use Discover channels and refresh the list if needed. Other discovered channels remain paused until you enable them. The worker must be running for discovery and message processing.
+
+People join the tracked channel's roster automatically on their first valid Wordle submission, with their Slack display name. Duplicate events do not create duplicate participants or credited days, and existing participant exclusions are preserved. Regular messages do not register players. Sync roster remains available if you want all human channel members included, including people who have never played.
 
 Scopes include channels:read/history, groups:read/history, users:read, chat:write, reactions:write, commands and [metadata.message:read](https://docs.slack.dev/reference/scopes/metadata.message.read/) for delivery reconciliation. Private channels require an invitation. Reinstall after adding scopes. Tokens are encrypted in PostgreSQL and never returned to the frontend. One Slack app can connect multiple workspaces; callbacks are routed using the signed workspace identity.
 
