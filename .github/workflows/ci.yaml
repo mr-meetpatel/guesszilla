@@ -1,7 +1,14 @@
 name: CI
 on:
+  # Validate pull requests once, then run again only after changes land on main.
+  # Limiting push events to main avoids duplicate runs for a branch push that
+  # also emits a pull_request synchronize event.
   push:
+    branches:
+      - main
   pull_request:
+    branches:
+      - main
 permissions:
   contents: read
 jobs:
