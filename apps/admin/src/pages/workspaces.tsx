@@ -67,8 +67,19 @@ export function WorkspacesPage() {
               />
               <Modal
                 title={`Clear ${w.name} history`}
-                description="Permanent removal of workspace game data."
-                trigger={<button>Clear game history</button>}
+                description={
+                  w.active
+                    ? 'Pause this workspace before permanently removing its game data.'
+                    : 'Permanent removal of workspace game data.'
+                }
+                trigger={
+                  <button
+                    disabled={w.active}
+                    title={w.active ? 'Pause the workspace first' : undefined}
+                  >
+                    Clear game history
+                  </button>
+                }
               >
                 <CleanupForm workspaceId={w.id} />
               </Modal>
