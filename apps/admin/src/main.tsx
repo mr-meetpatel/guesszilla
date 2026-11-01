@@ -7,7 +7,9 @@ import './styles.css';
 
 const client = new QueryClient({
   defaultOptions: {
-    queries: { retry: false, refetchInterval: 5000, refetchIntervalInBackground: false },
+    // Queries refresh on navigation/focus, while pages that need live updates
+    // opt into polling explicitly. Avoid polling every admin endpoint globally.
+    queries: { retry: false },
   },
 });
 ReactDOM.createRoot(document.getElementById('root')!).render(
