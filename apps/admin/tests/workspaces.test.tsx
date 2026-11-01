@@ -15,7 +15,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
-it('offers channels for the OAuth workspace and tracks only the selected channel', async () => {
+it('configures only the channel already selected in Slack OAuth', async () => {
   const updates: unknown[] = [];
   server.use(
     http.get('/api/v1/channels', ({ request }) => {
@@ -36,22 +36,22 @@ it('offers channels for the OAuth workspace and tracks only the selected channel
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
-      <MemoryRouter initialEntries={['/workspaces?oauth=connected&workspace_id=TNEW']}>
+      <MemoryRouter
+        initialEntries={['/workspaces?oauth=connected&workspace_id=TNEW&channel_id=channel-1']}
+      >
         <WorkspacesPage />
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  await screen.findByRole('option', { name: '# wordle' });
-  expect(screen.getByRole('button', { name: 'Connect channel' })).toBeDisabled();
+  await screen.findByText('# wordle');
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  expect(screen.queryByText('# general')).not.toBeInTheDocument();
   expect(updates).toEqual([]);
-  await userEvent.selectOptions(screen.getByLabelText('Slack channel'), 'channel-1');
   await userEvent.type(screen.getByLabelText('Slash-command password'), 'a-channel-password');
-  await userEvent.click(screen.getByRole('button', { name: 'Connect channel' }));
-  await waitFor(() =>
-    expect(screen.queryByText('Choose a channel to connect')).not.toBeInTheDocument(),
-  );
+  await userEvent.click(screen.getByRole('button', { name: 'Save channel password' }));
+  await waitFor(() => expect(screen.queryByText('Finish channel setup')).not.toBeInTheDocument());
   expect(updates).toEqual([
     { id: 'channel-1', body: { version: 3, active: true, password: 'a-channel-password' } },
   ]);
-  expect(screen.queryByText('Choose a channel to connect')).not.toBeInTheDocument();
+  expect(screen.queryByText('Finish channel setup')).not.toBeInTheDocument();
 });

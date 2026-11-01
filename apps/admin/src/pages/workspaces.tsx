@@ -33,10 +33,14 @@ export function WorkspacesPage() {
           </button>
         }
       >
-        Connect Slack, discover channels, and decide where the game happens.
+        Connect Slack and choose your Wordle channel on Slack's authorization screen.
       </Title>
       {connectedWorkspace && (
-        <ConnectChannel workspaceId={connectedWorkspace} onConnected={() => setParams({})} />
+        <ConnectChannel
+          workspaceId={connectedWorkspace}
+          channelId={params.get('channel_id') || ''}
+          onConnected={() => setParams({})}
+        />
       )}
       <div className="workspace-cards">
         {workspaces.map((w) => (
@@ -66,19 +70,19 @@ export function WorkspacesPage() {
       </div>
       {!workspaces.length && (
         <Empty title="Connect your first workspace.">
-          Authorize the Slack app, then discover the channels you want to track.
+          Authorize the Slack app and select the channel you want to track.
         </Empty>
       )}
       <Panel
         title={workspace ? `Channels in ${workspace.name}` : 'Tracked channels'}
-        caption="Newly discovered channels start paused. Invite the bot before enabling tracking. Players join the roster automatically when they post a valid Wordle."
+        caption="Only channels selected during Slack authorization are added. Players join the roster automatically when they post a valid Wordle."
         action={
           workspace && (
             <button
               disabled={action.isPending}
               onClick={() => action.mutate(() => write(`/workspaces/${workspace.id}/sync`, {}))}
             >
-              <RefreshCw size={15} /> Discover channels
+              <RefreshCw size={15} /> Refresh connected channels
             </button>
           )
         }
@@ -119,28 +123,22 @@ export function WorkspacesPage() {
 
 function ConnectChannel({
   workspaceId,
+  channelId,
   onConnected,
 }: {
   workspaceId: string;
+  channelId: string;
   onConnected: () => void;
 }) {
   const action = useAction();
-  const [selected, setSelected] = useState('');
   const query = useQuery({
     queryKey: ['channels', workspaceId],
     queryFn: () =>
       api<Envelope<Channel[]>>('/channels?workspace_id=' + encodeURIComponent(workspaceId)),
-    // Discovery runs in the worker. Refresh only this onboarding screen while
-    // waiting for its first channels, and stop after 30 seconds.
-    refetchInterval: (query) =>
-      !query.state.data?.data.length &&
-      query.state.dataUpdateCount + query.state.errorUpdateCount < 15
-        ? 2000
-        : false,
   });
+  const channel = query.data?.data.find((item) => item.id === channelId);
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const channel = query.data?.data.find((item) => item.id === selected);
     if (!channel) return;
     const password = String(new FormData(event.currentTarget).get('password') || '');
     action.mutate(async () => {
@@ -154,26 +152,19 @@ function ConnectChannel({
   }
   return (
     <Panel
-      title="Choose a channel to connect"
-      caption="Invite the bot to your chosen channel in Slack. Private channels appear only after the bot is invited. New players are added when they share a valid Wordle attempt."
+      title="Finish channel setup"
+      caption="Your channel was selected on Slack. Set its password to enable manual stats commands. Invite the bot if it is not already a member."
     >
       {query.error && <ErrorBox error={query.error} />}
       <form onSubmit={submit}>
-        <label>
-          Slack channel
-          <select required value={selected} onChange={(event) => setSelected(event.target.value)}>
-            <option value="">Select a channel</option>
-            {query.data?.data.map((channel) => (
-              <option key={channel.id} value={channel.id}>
-                # {channel.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {!query.data?.data.length && (
-          <p role="status">
-            Waiting for channel discovery. If channels do not appear, check the background job and
-            use Discover channels below, then refresh.
+        {channel && (
+          <p>
+            Connected channel: <strong># {channel.name}</strong>
+          </p>
+        )}
+        {!query.isPending && !channel && !query.error && (
+          <p role="alert">
+            The selected channel is unavailable. Connect through Slack again to choose a channel.
           </p>
         )}
         <label>
@@ -188,8 +179,8 @@ function ConnectChannel({
           />
         </label>
         <p className="subtle">Use /send-stats followed by this password to request a report.</p>
-        <button type="submit" className="primary" disabled={!selected || action.isPending}>
-          Connect channel
+        <button type="submit" className="primary" disabled={!channel || action.isPending}>
+          Save channel password
         </button>
         <button type="button" onClick={() => query.refetch()} disabled={query.isFetching}>
           Refresh channels

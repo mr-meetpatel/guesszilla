@@ -100,6 +100,9 @@ export function Status({ value }: { value: string }) {
 
 export function usePeriod() {
   const { channel } = useScope();
+  const eligibleDays = channel?.rules.weekdays || [0, 1, 2, 3, 4];
+  const firstDay = Math.min(...eligibleDays);
+  const lastDay = Math.max(...eligibleDays);
   function defaults() {
     const today = new Date(
       new Intl.DateTimeFormat('en-CA', {
@@ -110,8 +113,9 @@ export function usePeriod() {
       }).format(new Date()) + 'T12:00:00Z',
     );
     today.setUTCDate(today.getUTCDate() - ((today.getUTCDay() + 6) % 7));
+    today.setUTCDate(today.getUTCDate() + firstDay);
     const start = today.toISOString().slice(0, 10);
-    today.setUTCDate(today.getUTCDate() + 4);
+    today.setUTCDate(today.getUTCDate() + lastDay - firstDay);
     return [start, today.toISOString().slice(0, 10)];
   }
   const [start, setStart] = useState(() => defaults()[0]);
@@ -120,7 +124,7 @@ export function usePeriod() {
     const [a, b] = defaults();
     setStart(a);
     setEnd(b);
-  }, [channel?.id]);
+  }, [channel?.id, channel?.rules.timezone, firstDay, lastDay]);
   const query = useQuery({
     queryKey: ['analytics', channel?.id, start, end],
     queryFn: () =>

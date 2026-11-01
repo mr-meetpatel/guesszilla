@@ -25,11 +25,10 @@ from wordle_bot.platform.models import (
 )
 from wordle_bot.platform.reports import crypto
 from wordle_bot.platform.rules import ReportRules
-from wordle_bot.repositories.models import Job
 
 SCOPES = (
     "channels:read,channels:history,groups:read,groups:history,users:read,"
-    "chat:write,reactions:write,commands,metadata.message:read"
+    "chat:write,reactions:write,commands,metadata.message:read,incoming-webhook"
 )
 
 
@@ -104,6 +103,16 @@ class SlackInstallations:
             team = result.get("team")
             if not team or not team.get("id") or not result.get("access_token"):
                 abort(422, description="A workspace bot installation is required")
+            selected = result.get("incoming_webhook") or {}
+            slack_channel = selected.get("channel_id")
+            if not isinstance(slack_channel, str) or not 1 <= len(slack_channel) <= 64:
+                abort(
+                    422,
+                    description=(
+                        "Select a channel on Slack's authorization screen; "
+                        "enable incoming webhooks and reconnect"
+                    ),
+                )
             with Session(self.engine) as db, db.begin():
                 workspace = db.get(Workspace, team["id"])
                 if not workspace:
@@ -116,23 +125,28 @@ class SlackInstallations:
                 workspace.bot_id = result.get("bot_user_id", "")
                 workspace.scopes = result.get("scope", "")
                 workspace.updated_at = utcnow()
-                audit(db, "workspace.connected", actor=actor, workspace=workspace.id)
-                # Persist discovery with the installation so worker restarts cannot
-                # leave a successful connection without channel discovery.
-                now = utcnow()
-                db.add(
-                    Job(
-                        delivery_key="oauth-discover:" + digest(request.args["state"]),
-                        kind="workspace_sync",
-                        payload={"workspace_id": workspace.id},
-                        status="pending",
-                        attempts=0,
-                        available_at=now,
-                        created_at=now,
+                db.flush()
+                # Slack's OAuth channel picker is the only source of new channels.
+                # Reauthorizing preserves the channel's existing rules/password.
+                name = (selected.get("channel") or slack_channel).lstrip("#")[:160]
+                channel_id = db.scalar(
+                    insert(Channel)
+                    .values(
+                        workspace_id=workspace.id,
+                        slack_id=slack_channel,
+                        name=name,
+                        active=True,
+                        rules=ReportRules().model_dump(),
                     )
+                    .on_conflict_do_update(constraint="uq_workspace_channel", set_={"name": name})
+                    .returning(Channel.id)
                 )
+                audit(db, "workspace.connected", actor=actor, workspace=workspace.id)
             return redirect(
-                "/workspaces?" + urlencode({"oauth": "connected", "workspace_id": team["id"]})
+                "/workspaces?"
+                + urlencode(
+                    {"oauth": "connected", "workspace_id": team["id"], "channel_id": channel_id}
+                )
             )
 
         app.register_blueprint(blueprint)
@@ -146,6 +160,11 @@ class SlackInstallations:
         return WebClient(token=token, timeout=10, retry_handlers=[])
 
     def discover(self, workspace_id: str) -> None:
+        """Refresh saved channel names; never enumerate or import other channels.
+
+        Kept for queued workspace_sync jobs from older releases as well as the
+        admin refresh action, so neither can restart workspace-wide discovery.
+        """
         client = self.client(workspace_id)
         self.checkpoint()
         identity = client.auth_test()
@@ -156,34 +175,19 @@ class SlackInstallations:
             if not workspace or not workspace.active:
                 raise ValueError("Workspace unavailable")
             workspace.bot_id = identity["user_id"]
-        page: Any
-        cursor = None
-        while True:
-            self.checkpoint()
-            page = client.conversations_list(
-                types="public_channel,private_channel",
-                limit=200,
-                exclude_archived=True,
-                cursor=cursor,
+        with Session(self.engine) as db:
+            channels = list(
+                db.execute(
+                    select(Channel.id, Channel.slack_id).where(Channel.workspace_id == workspace_id)
+                )
             )
+        for channel_id, slack_id in channels:
+            self.checkpoint()
+            item = client.conversations_info(channel=slack_id)["channel"]
             with Session(self.engine) as db, db.begin():
-                for item in page.get("channels", []):
-                    db.execute(
-                        insert(Channel)
-                        .values(
-                            workspace_id=workspace_id,
-                            slack_id=item["id"],
-                            name=item["name"],
-                            active=False,
-                            rules=ReportRules().model_dump(),
-                        )
-                        .on_conflict_do_update(
-                            constraint="uq_workspace_channel", set_={"name": item["name"]}
-                        )
-                    )
-            cursor = page.get("response_metadata", {}).get("next_cursor")
-            if not cursor:
-                break
+                channel = db.get(Channel, channel_id)
+                if channel:
+                    channel.name = item["name"][:160]
 
     def sync_roster(self, channel_id: str) -> None:
         with Session(self.engine) as db:

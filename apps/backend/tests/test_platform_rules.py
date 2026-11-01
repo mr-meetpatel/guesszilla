@@ -15,6 +15,24 @@ def test_custom_week_and_rolling_windows():
     assert resolve_window(date(2026, 10, 31), "rolling", 7, rules)[0] == date(2026, 10, 25)
 
 
+@pytest.mark.parametrize(
+    "weekdays,start,end",
+    [
+        ([0, 1, 2, 3, 4, 5, 6], date(2026, 10, 26), date(2026, 11, 1)),
+        ([5, 6], date(2026, 10, 31), date(2026, 11, 1)),
+    ],
+)
+def test_weekly_windows_follow_eligible_days(weekdays, start, end):
+    from datetime import timedelta
+
+    rules = ReportRules(weekdays=weekdays)
+    assert resolve_window(date(2026, 10, 31), "current_week", 7, rules) == (start, end)
+    assert resolve_window(date(2026, 10, 31), "previous_week", 7, rules) == (
+        start - timedelta(days=7),
+        end - timedelta(days=7),
+    )
+
+
 def test_report_sorts_names_and_includes_zero_players():
     snapshot = {
         "start": "2026-10-26",

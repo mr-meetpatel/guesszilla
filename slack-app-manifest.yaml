@@ -26,7 +26,10 @@ oauth_config:
       - groups:read
       - users:read
       - metadata.message:read
+      - incoming-webhook
 settings:
+  incoming_webhooks:
+    incoming_webhooks_enabled: true
   event_subscriptions:
     request_url: https://YOUR_PUBLIC_HOST/slack/events
     bot_events:

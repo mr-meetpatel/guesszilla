@@ -442,12 +442,19 @@ def test_oauth_state_replay_and_revoked_session(platform):
     assert client.get("/slack/oauth/callback?state=unrecognized&code=fake").status_code == 400
 
 
-def test_oauth_connect_queues_discovery_and_selects_workspace(platform, monkeypatch):
+def test_oauth_connect_saves_only_slack_selected_channel(platform, monkeypatch):
+    from urllib.parse import parse_qs, urlsplit
+
     from wordle_bot.repositories.models import Job
 
     settings, engine = platform
+    settings = settings.model_copy(
+        update={"slack_client_id": "client-id", "slack_client_secret": SecretStr("secret")}
+    )
     client = create_app(settings).test_client()
-    login(client)
+    headers = login(client)
+    authorization = client.post("/api/v1/workspaces/connect", headers=headers).json["data"]["url"]
+    assert "incoming-webhook" in parse_qs(urlsplit(authorization).query)["scope"][0].split(",")
     with Session(engine) as db, db.begin():
         session = db.scalar(select(AdminSession))
         db.add(
@@ -462,18 +469,72 @@ def test_oauth_connect_queues_discovery_and_selects_workspace(platform, monkeypa
         "team": {"id": "TNEW", "name": "New workspace"},
         "access_token": "xoxb-new",
         "bot_user_id": "BNEW",
+        "incoming_webhook": {"channel_id": "CSELECTED", "channel": "wordle"},
     }
     monkeypatch.setattr("wordle_bot.platform.oauth.WebClient", lambda **kwargs: slack)
     response = client.get("/slack/oauth/callback?state=connect-state&code=fake")
     assert response.status_code == 302
-    assert response.location == "/workspaces?oauth=connected&workspace_id=TNEW"
     with Session(engine) as db:
         assert db.get(Workspace, "TNEW") is not None
-        job = db.scalar(select(Job).where(Job.kind == "workspace_sync"))
-        assert job.payload == {"workspace_id": "TNEW"}
+        channels = list(db.scalars(select(Channel)))
+        assert len(channels) == 1
+        assert channels[0].slack_id == "CSELECTED"
+        assert channels[0].name == "wordle"
+        assert channels[0].active is True
+        assert response.location == (
+            "/workspaces?oauth=connected&workspace_id=TNEW&channel_id=" + channels[0].id
+        )
+        assert list(db.scalars(select(Job))) == []
     assert client.get("/slack/oauth/callback?state=connect-state&code=fake").status_code == 400
     with Session(engine) as db:
-        assert len(list(db.scalars(select(Job)))) == 1
+        assert len(list(db.scalars(select(Channel)))) == 1
+    with Session(engine) as db, db.begin():
+        channel = db.scalar(select(Channel))
+        channel.active = False
+        channel.rules = {"weekdays": [5, 6], "threshold": 2}
+        channel.password_hash = "existing-hash"
+        channel.version = 4
+        session = db.scalar(select(AdminSession))
+        db.add(
+            OAuthState(
+                digest=digest("reconnect"),
+                session_id=session.id,
+                expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            )
+        )
+    assert client.get("/slack/oauth/callback?state=reconnect&code=fake").status_code == 302
+    with Session(engine) as db:
+        channel = db.scalar(select(Channel))
+        assert len(list(db.scalars(select(Channel)))) == 1
+        assert channel.active is False
+        assert channel.rules == {"weekdays": [5, 6], "threshold": 2}
+        assert channel.password_hash == "existing-hash"
+        assert channel.version == 4
+
+
+def test_oauth_missing_channel_does_not_save_installation(platform, monkeypatch):
+    settings, engine = platform
+    client = create_app(settings).test_client()
+    login(client)
+    with Session(engine) as db, db.begin():
+        session = db.scalar(select(AdminSession))
+        db.add(
+            OAuthState(
+                digest=digest("missing-channel"),
+                session_id=session.id,
+                expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            )
+        )
+    slack = Mock()
+    slack.oauth_v2_access.return_value = {
+        "team": {"id": "TNEW", "name": "New workspace"},
+        "access_token": "xoxb-test",
+    }
+    monkeypatch.setattr("wordle_bot.platform.oauth.WebClient", lambda **kwargs: slack)
+    assert client.get("/slack/oauth/callback?state=missing-channel&code=fake").status_code == 422
+    with Session(engine) as db:
+        assert list(db.scalars(select(Workspace))) == []
+        assert list(db.scalars(select(Channel))) == []
 
 
 @pytest.mark.parametrize("existing", [False, True])
@@ -605,9 +666,7 @@ def test_channel_discovery_preserves_settings_and_refreshes_bot_identity(platfor
     channel_id = seed_channel(settings, engine)
     slack = Mock()
     slack.auth_test.return_value = {"ok": True, "team_id": "T1", "user_id": "UBOT"}
-    slack.conversations_list.return_value = {
-        "channels": [{"id": "C1", "name": "renamed"}, {"id": "C2", "name": "new"}]
-    }
+    slack.conversations_info.return_value = {"channel": {"id": "C1", "name": "renamed"}}
     installation = SlackInstallations(settings, engine)
     installation.client = Mock(return_value=slack)
     installation.discover("T1")
@@ -617,7 +676,9 @@ def test_channel_discovery_preserves_settings_and_refreshes_bot_identity(platfor
         assert channel.active is True
         assert channel.name == "renamed"
         assert channel.rules["threshold"] == 5
-        assert db.scalar(select(Channel).where(Channel.slack_id == "C2")).active is False
+        assert len(list(db.scalars(select(Channel)))) == 1
+    slack.conversations_list.assert_not_called()
+    slack.conversations_info.assert_called_once_with(channel="C1")
 
 
 def test_roster_sync_preserves_exclusions_and_filters_non_humans(platform):
