@@ -107,3 +107,7 @@ db-up:
 	$(COMPOSE) up -d db
 validate-render:
 	$(UV) run --frozen python scripts/validate_render.py
+
+.PHONY: deploy-render
+deploy-render:
+	$(UV) run --frozen python scripts/deploy_render.py

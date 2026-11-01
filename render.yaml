@@ -11,6 +11,8 @@ envVarGroups:
         value: "1"
       - key: WORKER_POLL_SECONDS
         value: "2"
+      - key: PERSIST_LOGS
+        value: "false"
       - key: PUBLIC_URL
         sync: false
       - key: DATABASE_URL
@@ -28,6 +30,8 @@ envVarGroups:
 services:
   - type: web
     name: wordle-api
+    branch: main
+    autoDeployTrigger: 'off'
     runtime: docker
     plan: starter
     dockerfilePath: ./Dockerfile
@@ -39,6 +43,8 @@ services:
         value: "8000"
   - type: worker
     name: wordle-worker
+    branch: main
+    autoDeployTrigger: 'off'
     runtime: docker
     plan: starter
     dockerfilePath: ./Dockerfile
@@ -47,6 +53,8 @@ services:
       - fromGroup: wordle-platform-common
   - type: worker
     name: wordle-scheduler
+    branch: main
+    autoDeployTrigger: 'off'
     runtime: docker
     plan: starter
     dockerfilePath: ./Dockerfile
@@ -55,6 +63,8 @@ services:
       - fromGroup: wordle-platform-common
   - type: web
     name: wordle-admin
+    branch: main
+    autoDeployTrigger: 'off'
     runtime: docker
     plan: starter
     dockerfilePath: ./infra/admin.Dockerfile
