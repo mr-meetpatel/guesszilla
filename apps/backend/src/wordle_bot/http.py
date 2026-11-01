@@ -117,6 +117,13 @@ def create_app(settings: Settings | None = None, queue: JobQueue | None = None) 
             healthy = False
         return jsonify(status="ready" if healthy else "unavailable"), 200 if healthy else 503
 
+    @app.get("/health/status")
+    def status() -> tuple[Response, int]:
+        from wordle_bot.health import health_status
+
+        snapshot, code = health_status(repository.engine if repository else None, settings)
+        return jsonify(snapshot), code
+
     @app.get("/thankyou")
     def thankyou() -> Response:
         return Response("Thank you for installing the Wordle bot.", mimetype="text/plain")

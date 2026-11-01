@@ -78,6 +78,34 @@ def test_idempotent_migrations_preserve_records(database, repository):
         )
 
 
+def test_public_health_runs_select_one_and_does_not_write(database, repository, settings):
+    from sqlalchemy import event
+
+    configured = settings.model_copy(update={"database_url": database[0].database_url})
+    client = create_app(configured).test_client()
+    engine = client.application.extensions["wordle_repository"].engine
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        before = client.get("/health/status")
+        assert before.status_code == 503
+        assert before.json["database"]["status"] == "up"
+        repository.heartbeat("health-test")
+        after = client.get("/health/status")
+        assert after.status_code == 200
+        assert after.json["worker"]["status"] == "up"
+        assert after.json["scheduler"]["status"] == "not_applicable"
+        assert any(statement == "SELECT 1" for statement in statements)
+        assert all(statement.lstrip().upper().startswith("SELECT") for statement in statements)
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+        engine.dispose()
+
+
 def test_platform_upgrade_from_legacy_preserves_participation(database, repository):
     from alembic import command
     from alembic.config import Config
