@@ -355,6 +355,14 @@ and [disable automatic deploys](https://render.com/docs/blueprint-spec#autodeplo
 
 ## Troubleshooting
 
+An independent monitor can call public `GET /health/status`. It performs a read-only
+`SELECT 1` database probe and one aggregate heartbeat read, returning backend, database,
+worker and scheduler status with database latency and heartbeat ages. Healthy responses
+use 200; degraded responses use 503. Results are not cached and expose no credentials
+or raw errors. `/health/live` and `/health/ready` retain their existing behavior.
+The separate `wordle-uptime` project uses this endpoint from Cloudflare every five minutes
+and stores seven days of observations in D1, without adding monitoring tables to Supabase.
+
 | Symptom | Check |
 | --- | --- |
 | API exits at startup | Generate real JWT/Fernet keys; placeholders are rejected |

@@ -172,3 +172,8 @@ def test_health_without_slack_api_calls(settings):
     assert client.get("/health/ready").status_code == 503
     assert client.get("/score").status_code == 404
     assert client.get("/msg").status_code == 404
+    status = client.get("/health/status")
+    assert status.status_code == 503
+    assert status.json["backend"]["status"] == "up"
+    assert status.json["database"]["status"] == "unknown"
+    assert status.headers["Cache-Control"] == "no-store"
