@@ -1,0 +1,5 @@
+packages:
+  - apps/admin
+allowBuilds:
+  esbuild: true
+  msw: true

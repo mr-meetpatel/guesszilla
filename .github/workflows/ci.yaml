@@ -1,0 +1,68 @@
+name: CI
+on:
+  # Validate pull requests once, then run again only after changes land on main.
+  # Limiting push events to main avoids duplicate runs for a branch push that
+  # also emits a pull_request synchronize event.
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    env:
+      ENV_FILE: .env.example
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --python python
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - run: npm install --global pnpm@12.4.2
+      - run: pnpm install --frozen-lockfile
+      - run: make check
+      - run: make check-client
+      - run: pnpm --filter @wordle/admin exec playwright install --with-deps chromium
+      - run: make test-all
+      - run: make validate-render
+      - run: docker build -t wordle-bot:ci .
+      - run: docker build -f infra/admin.Dockerfile -t wordle-admin:ci .
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-test-results
+          path: apps/admin/test-results/
+      - run: docker compose down
+        if: always()
+  deploy:
+    name: Deploy to Render
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    concurrency:
+      group: render-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Deploy tested commit and wait for live services
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+          RENDER_COMMIT_SHA: ${{ github.sha }}
+        run: python scripts/deploy_render.py

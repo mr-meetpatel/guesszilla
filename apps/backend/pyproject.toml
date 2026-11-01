@@ -1,0 +1,52 @@
+[project]
+name = "wordle-slack-bot"
+version = "1.0.0"
+description = "A durable Slack bot for weekly Wordle participation and reactions"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+  "alembic>=1.17.0,<2",
+  "flask>=3.1.2,<4",
+  "gunicorn>=23.0.0,<26",
+  "psycopg[binary]>=3.2.10,<4",
+  "pydantic-settings>=2.11.0,<3",
+  "slack-sdk>=3.36.0,<4",
+  "sqlalchemy>=2.0.44,<3",
+  "flask-smorest>=0.46,<1",
+  "flask-jwt-extended>=4.7,<5",
+  "argon2-cffi>=25,<26",
+  "cryptography>=46,<48",
+  "tzdata>=2026.1",
+]
+
+[dependency-groups]
+dev = ["mypy>=1.18.0,<2", "pytest>=8.4.0,<10", "ruff>=0.14.0,<1", "types-requests>=2.32.0", "pyyaml>=6.0.3,<7", "jsonschema>=4.25.0,<5"]
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wordle_bot"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"migrations" = "wordle_bot/migrations"
+
+[project.scripts]
+wordle-bot = "wordle_bot.cli:main"
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+files = ["src"]
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: requires a disposable PostgreSQL database", "e2e: backend workflows requiring disposable PostgreSQL"]

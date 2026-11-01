@@ -1,0 +1,40 @@
+display_information:
+  name: Wordle Stats
+  description: Weekly Wordle participation and guess reactions
+  background_color: "#538d4e"
+features:
+  bot_user:
+    display_name: Wordle Stats
+    always_online: false
+  slash_commands:
+    - command: /send-stats
+      url: https://YOUR_PUBLIC_HOST/slack/commands
+      description: Post this week's Wordle participation to the tracked channel
+      usage_hint: ""
+      should_escape: false
+oauth_config:
+  redirect_urls:
+    - https://YOUR_PUBLIC_HOST/slack/oauth/callback
+  scopes:
+    bot:
+      - channels:history
+      - groups:history
+      - chat:write
+      - reactions:write
+      - commands
+      - channels:read
+      - groups:read
+      - users:read
+      - metadata.message:read
+      - incoming-webhook
+settings:
+  incoming_webhooks:
+    incoming_webhooks_enabled: true
+  event_subscriptions:
+    request_url: https://YOUR_PUBLIC_HOST/slack/events
+    bot_events:
+      - message.channels
+      - message.groups
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

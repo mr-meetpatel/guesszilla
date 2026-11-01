@@ -1,0 +1,77 @@
+# Standalone configuration: docker compose -f compose.supabase.yaml up --build -d
+name: wordle-bot-supabase
+x-app: &app
+  build: .
+  env_file: ${ENV_FILE:-.env}
+  environment:
+    DB_BACKEND: supabase
+    APP_ENV: production
+    PORT: "8000"
+    ADMIN_PANEL_ENABLED: "true"
+  restart: unless-stopped
+  init: true
+  stop_grace_period: 40s
+  mem_limit: 512m
+  cpus: "1.0"
+services:
+  migrate:
+    <<: *app
+    command: ["wordle-bot", "migrate"]
+    restart: "no"
+    healthcheck:
+      disable: true
+  web:
+    <<: *app
+    command: ["wordle-bot", "serve", "--skip-migrate"]
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  worker:
+    <<: *app
+    environment:
+      DB_BACKEND: supabase
+      APP_ENV: production
+      WORKER_ID: compose-worker
+      ADMIN_PANEL_ENABLED: "true"
+    command: ["wordle-bot", "worker", "--skip-migrate"]
+    healthcheck:
+      test: ["CMD", "wordle-bot", "health-worker"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  scheduler:
+    <<: *app
+    environment:
+      DB_BACKEND: supabase
+      APP_ENV: production
+      ADMIN_PANEL_ENABLED: "true"
+      WORKER_ID: scheduler
+    command: ["wordle-bot", "scheduler", "--skip-migrate"]
+    healthcheck:
+      test: ["CMD", "wordle-bot", "health-worker"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  frontend:
+    build:
+      context: .
+      dockerfile: infra/admin.Dockerfile
+    environment:
+      API_UPSTREAM: web:8000
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-8080}:8080"
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: "0.5"
+    depends_on:
+      web:
+        condition: service_started

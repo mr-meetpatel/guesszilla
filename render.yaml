@@ -1,0 +1,43 @@
+envVarGroups:
+  - name: wordle-platform-common
+    envVars:
+      - key: ADMIN_PANEL_ENABLED
+        value: "true"
+      - key: DB_BACKEND
+        value: supabase
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: WEB_WORKERS
+        value: "1"
+      - key: WORKER_POLL_SECONDS
+        value: "2"
+      - key: PERSIST_LOGS
+        value: "false"
+      - key: PUBLIC_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: CREDENTIAL_ENCRYPTION_KEYS
+        sync: false
+      - key: SLACK_SIGNING_SECRET
+        sync: false
+      - key: SLACK_CLIENT_ID
+        sync: false
+      - key: SLACK_CLIENT_SECRET
+        sync: false
+services:
+  - type: web
+    name: wordle
+    branch: main
+    autoDeployTrigger: 'off'
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerCommand: wordle-bot combined
+    healthCheckPath: /health/ready
+    envVars:
+      - fromGroup: wordle-platform-common
+      - key: PORT
+        value: "8000"
