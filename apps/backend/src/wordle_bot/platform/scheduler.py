@@ -105,7 +105,9 @@ class Scheduler:
                     continue
             except Exception as error:
                 logging.getLogger(__name__).error(
-                    "Scheduler unavailable", extra={"error_code": type(error).__name__}
+                    "Scheduler unavailable",
+                    extra={"error_code": type(error).__name__},
+                    exc_info=True,
                 )
             stop.wait(5)
 

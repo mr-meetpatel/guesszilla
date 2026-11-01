@@ -55,6 +55,13 @@ def create_app(settings: Settings | None = None, queue: JobQueue | None = None) 
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Cache-Control"] = "no-store"
         sink = app.extensions.get("event_sink")
+        logger.info(
+            "HTTP request completed",
+            extra={
+                "request_id": g.get("request_id"),
+                "status": response.status_code,
+            },
+        )
         if sink and request.path.startswith("/api/") and request.path != "/api/v1/events":
             sink.record(
                 "log",

@@ -11,7 +11,15 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
-        for name in ("job_id", "attempt", "error_code", "worker_id"):
+        for name in (
+            "job_id",
+            "attempt",
+            "error_code",
+            "worker_id",
+            "request_id",
+            "schedule_id",
+            "status",
+        ):
             if hasattr(record, name):
                 fields[name] = str(getattr(record, name))
         if hasattr(record, "error_message"):

@@ -77,7 +77,9 @@ class Worker:
         except Exception as error:
             self.repository.fail(job, type(error).__name__, self.retry_delay(job.attempts))
             logger.warning(
-                "Job failed", extra={"job_id": job.id, "error_code": type(error).__name__}
+                "Job failed",
+                extra={"job_id": job.id, "error_code": type(error).__name__},
+                exc_info=True,
             )
 
     @staticmethod
@@ -104,6 +106,8 @@ class Worker:
                     continue
             except Exception as error:
                 logger.error(
-                    "Worker database unavailable", extra={"error_code": type(error).__name__}
+                    "Worker database unavailable",
+                    extra={"error_code": type(error).__name__},
+                    exc_info=True,
                 )
             self.stop.wait(self.settings.worker_poll_seconds)
